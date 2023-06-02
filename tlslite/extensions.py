@@ -2135,6 +2135,102 @@ class CompressCertificateExtension(VarListExtension):
         return super(CompressCertificateExtension, self).create(advertised_algorithms)
 
 
+class SCTExtension(TLSExtension):
+    """
+    Client and Server Hello extension from Certificate Transparency.
+    Extension containing a list of serialised SignedCertificateTimestamp
+    objects.
+    See RFC 6962
+    """
+
+    def __init__(self):
+        """Create instance of class"""
+        extType = ExtensionType.signed_certificate_timestamp
+        super(SCTExtension, self).__init__(extType=extType)
+        self.sct_list = None
+
+    def create(self, sct_list):
+        """
+        Set the list of signed certificate timestamps
+        :type sct_list: list of bytearrays
+        :param sct_list: list of serialised certificate time stamps
+        """
+        self.sct_list = sct_list
+        return self
+
+    @property
+    def extData(self):
+
+        if self.sct_list is None:
+            return bytearray(0)
+
+        writer = Writer()
+        # elements have 2 byte header lengths
+        for sct in self.sct_list:
+            writer.add(len(sct), 2)
+            writer.bytes += sct
+
+        writer2 = Writer()
+        writer2.add(len(writer.bytes), 2)
+        return writer2.bytes + writer.bytes
+
+    def parse(self, parser):
+
+        if parser.getRemainingLength() == 0:
+            self.sct_list = None
+            return self
+
+        self.sct_list = []
+
+        parser.startLengthCheck(2)
+        while not parser.atLengthCheck():
+            self.sct_list.append(parser.getVarBytes(2))
+        parser.stopLengthCheck()
+
+        if parser.getRemainingLength() != 0:
+            raise SyntaxError("Trailing data in SCTExtension")
+
+        return self
+
+
+class ALPSExtension(TLSExtension):
+
+    def __init__(self):
+        super(ALPSExtension, self).__init__(extType=ExtensionType.application_settings)
+        self.protocol_names = None
+
+    def create(self, protocol_names):
+        """
+        Set the list of signed certificate timestamps
+        :type protocol_names: list of bytearrays
+        :param protocol_names: list of protocol names to support (b'h2', b'http/1.1', etc)
+        """
+        self.protocol_names = protocol_names
+        return self
+
+    @property
+    def extData(self):
+        if self.protocol_names is None:
+            return bytearray(0)
+
+        writer = Writer()
+        for prot in self.protocol_names:
+            writer.add(len(prot), 1)
+            writer.bytes += prot
+
+        writer2 = Writer()
+        writer2.add(len(writer.bytes), 2)
+        writer2.bytes += writer.bytes
+
+        return writer2.bytes
+
+    def parse(self, p):
+        """
+        We do not need to support a parse function because this implementation is only partial
+        """
+        return self
+
+
 TLSExtension._universalExtensions = \
     {
         ExtensionType.server_name: SNIExtension,
@@ -2157,7 +2253,9 @@ TLSExtension._universalExtensions = \
         ExtensionType.psk_key_exchange_modes: PskKeyExchangeModesExtension,
         ExtensionType.cookie: CookieExtension,
         ExtensionType.record_size_limit: RecordSizeLimitExtension,
-        ExtensionType.compress_certificate: CompressCertificateExtension
+        ExtensionType.compress_certificate: CompressCertificateExtension,
+        ExtensionType.signed_certificate_timestamp: SCTExtension,
+        ExtensionType.application_settings: ALPSExtension
     }
 
 TLSExtension._serverExtensions = \

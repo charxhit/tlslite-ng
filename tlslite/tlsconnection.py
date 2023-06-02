@@ -456,6 +456,8 @@ class TLSConnection(TLSRecordLayer):
                 raise ValueError("Caller passed no nextProtos")
         if alpn is not None and not alpn:
             raise ValueError("Caller passed empty alpn list")
+        if settings.use_alps_ext and not alpn:
+            raise ValueError("cannot use ALPS extension without advertising ALPN extension")
         # reject invalid hostnames but accept empty/None ones
         if serverName and not is_valid_hostname(serverName):
             raise ValueError("Caller provided invalid server host name: {0}"
@@ -675,7 +677,10 @@ class TLSConnection(TLSRecordLayer):
                                 srpParams, certParams, anonParams,
                                 serverName, nextProtos, reqTack, alpn):
         #Initialize acceptable ciphersuites
-        cipherSuites = [CipherSuite.TLS_EMPTY_RENEGOTIATION_INFO_SCSV]
+        if settings.use_renegotiation_ext:
+            cipherSuites = []
+        else:
+            cipherSuites = [CipherSuite.TLS_EMPTY_RENEGOTIATION_INFO_SCSV]
         if srpParams:
             cipherSuites += CipherSuite.getSrpAllSuites(settings)
         elif certParams:
@@ -788,6 +793,15 @@ class TLSConnection(TLSRecordLayer):
         if settings.use_certificate_compression:
             extensions.append(CompressCertificateExtension().create(
                 settings.certificate_compression_algorithms))
+
+        if settings.use_renegotiation_ext:
+            extensions.append(RenegotiationInfoExtension().create(bytearray(0)))
+
+        if settings.use_sct_ext:
+            extensions.append(SCTExtension().create(None))
+
+        if settings.use_alps_ext:
+            extensions.append(ALPSExtension().create([b'http/1.1']))
 
         # don't send empty list of extensions or extensions in SSLv3
         if not extensions or settings.maxVersion == (3, 0):
@@ -1147,6 +1161,21 @@ class TLSConnection(TLSRecordLayer):
                     yield result
             self._peer_record_size_limit = size_limit_ext.record_size_limit
         yield serverHello
+
+    @staticmethod
+    def _check_elements_and_set_order(to_check, to_compare, key=None):
+        if key is None:
+            key = lambda e: e
+
+        new_list = [None for _ in to_compare]
+        for element in to_check:
+            try:
+                new_list[to_compare.index(key(element))] = element
+            except ValueError:
+                continue
+
+        assert None not in new_list, "Requested elements not present in list"
+        return new_list
 
     @staticmethod
     def _getKEX(group, version):

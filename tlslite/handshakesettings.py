@@ -387,6 +387,9 @@ class HandshakeSettings(object):
         self.usePaddingExtension = True
         self.useExtendedMasterSecret = True
         self.requireExtendedMasterSecret = False
+        self.use_renegotiation_ext = True
+        self.use_sct_ext = False
+        self.use_alps_ext = False
         # certificate compression extensions
         self.use_certificate_compression = False
         self.certificate_compression_algorithms = compression.DEFAULT
@@ -627,6 +630,15 @@ class HandshakeSettings(object):
         if other.use_certificate_compression not in (True, False):
             raise ValueError("use_certificate_compression must be True or False")
 
+        if other.use_renegotiation_ext not in (True, False):
+            raise ValueError("use_renegotiation_ext must be True or False")
+
+        if other.use_sct_ext not in (True, False):
+            raise ValueError("use_sct_ext must be True or False")
+
+        if other.use_alps_ext not in (True, False):
+            raise ValueError("use_alps_ext must be True or False")
+
         if other.heartbeat_response_callback and not other.use_heartbeat_extension:
             raise ValueError("heartbeat_response_callback requires "
                              "use_heartbeat_extension")
@@ -704,6 +716,9 @@ class HandshakeSettings(object):
         other.sendFallbackSCSV = self.sendFallbackSCSV
         other.useEncryptThenMAC = self.useEncryptThenMAC
         other.usePaddingExtension = self.usePaddingExtension
+        other.use_sct_ext = self.use_sct_ext
+        other.use_alps_ext = self.use_alps_ext
+        other.use_renegotiation_ext = self.use_renegotiation_ext
         # cert compress
         other.use_certificate_compression = self.use_certificate_compression
         other.certificate_compression_algorithms = self.certificate_compression_algorithms

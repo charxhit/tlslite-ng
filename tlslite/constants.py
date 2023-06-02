@@ -165,6 +165,7 @@ class ExtensionType(TLSEnum):
     signature_algorithms = 13  # RFC 5246
     heartbeat = 15  # RFC 6520
     alpn = 16  # RFC 7301
+    signed_certificate_timestamp = 18  # RFC 6962
     client_hello_padding = 21  # RFC 7685
     encrypt_then_mac = 22  # RFC 7366
     extended_master_secret = 23  # RFC 7627
@@ -180,6 +181,7 @@ class ExtensionType(TLSEnum):
     signature_algorithms_cert = 50  # TLS 1.3
     key_share = 51  # TLS 1.3
     supports_npn = 13172
+    application_settings = 17513
     tack = 0xF300
     renegotiation_info = 0xff01  # RFC 5746
 
