@@ -7,7 +7,7 @@
 
 """Class for setting handshake parameters."""
 
-from .constants import CertificateType, CompressionAlgorithms
+from .constants import CertificateType, CompressionAlgorithms, CipherSuite, GroupName, ExtensionType
 from .utils import cryptomath, compression
 from .utils import cipherfactory
 from .utils.compat import ecdsaAllCurves, int_types
@@ -417,6 +417,9 @@ class HandshakeSettings(object):
         self.macNames = list(MAC_NAMES)
         self.keyExchangeNames = list(KEY_EXCHANGE_NAMES)
         self.cipherImplementations = list(CIPHER_IMPLEMENTATIONS)
+        self.cipher_order = []
+        self.extension_order = []
+        self.groups_order = []
 
     @staticmethod
     def _sanityCheckKeySizes(other):
@@ -755,6 +758,95 @@ class HandshakeSettings(object):
         if not other.cipherImplementations:
             raise ValueError("No supported cipher implementations")
 
+    def _sanity_check_cipher_order(self, other):
+        """
+        Make sure all ciphers in cipher order are supported and valid
+        """
+        cipher_order = other.cipher_order
+        if not cipher_order:
+            return
+
+        # Check no duplicates exist
+        if self._check_if_duplicates(cipher_order):
+            raise ValueError("provided cipher order should only contain unique elements")
+
+        for cipher in cipher_order:
+            if not isinstance(cipher, int):
+                raise ValueError("ciphers provided must represent integers")
+            if not cipher in CipherSuite.ietfNames:
+                raise ValueError("unknown cipher with value {}".format(cipher))
+
+    def _sanity_check_groups_order(self, other):
+        """
+        Make sure all supported group names provided are valid, and they are in order with the key shares
+        """
+
+        groups_order = other.groups_order
+        if not groups_order:
+            return
+
+        # Check no duplicates exist
+        if self._check_if_duplicates(groups_order):
+            raise ValueError("provided groups order should only contain unique elements")
+
+        group_set = set(groups_order)
+
+        # First, we quickly check if all group names are valid and supported
+        if not group_set.issubset(GroupName.all):
+            raise ValueError("one or more unknown groups provided ({})".format(group_set.difference(GroupName.all)))
+
+        # Then we make sure the key shares we are going to use are a subset of the groups provided:
+        key_shares = [getattr(GroupName, group_name) for group_name in self.keyShares]
+        if not set(key_shares).issubset(group_set):
+            raise ValueError("key shares must be a subset of the groups provided")
+
+        # Finally, rfc also specifies that the key shares must be in the same order as the supported groups
+        prev = -1
+        for i in range(len(key_shares)):
+            try:
+                # We must NOT enforce a strict order by simply just checking whether all elements in key_shares
+                # are the first elements of groups_order, because the key_shares can be a non-contiguous subset too
+                prev = groups_order.index(key_shares[i], start=prev+1)
+            except ValueError:
+                raise ValueError("key shares must be in the same order as the groups provided")
+
+    def _sanity_check_extension_order(self, other):
+        """
+        Make sure all extensions are supported and valid
+        """
+        extension_order = other.extension_order
+        if not extension_order:
+            return
+
+        # Check no duplicates exist
+        if self._check_if_duplicates(extension_order):
+            raise ValueError("provided extension order should only contain unique elements")
+
+        for ext in extension_order:
+            if not isinstance(ext, int):
+                raise ValueError("extensions provided must represent integers")
+            if not ExtensionType.toRepr(ext):
+                raise ValueError("unknown extension provided ({})".format(ext))
+
+    @staticmethod
+    def _check_if_duplicates(to_check):
+        """
+        Check whether every element in the provided iterable is unique
+        """
+
+        if len(to_check) - len(set(to_check)) != 0:
+            return True
+
+        return False
+
+    def _copy_order_settings(self, other):
+        """Copy all settings related to cipher, extension and group order"""
+
+        other.extension_order = self.extension_order
+        other.groups_order = self.groups_order
+        other.cipher_order = self.cipher_order
+
+
     def _copy_key_settings(self, other):
         """Copy key-related settings."""
         other.minKeySize = self.minKeySize
@@ -789,6 +881,7 @@ class HandshakeSettings(object):
         self._copy_cipher_settings(other)
         self._copy_extension_settings(other)
         self._copy_key_settings(other)
+        self._copy_order_settings(other)
 
         other.pskConfigs = self.pskConfigs
         other.psk_modes = self.psk_modes
@@ -815,6 +908,11 @@ class HandshakeSettings(object):
 
         self._sanity_check_implementations(other)
         self._sanity_check_ciphers(other)
+
+        # checks for order settings
+        self._sanity_check_cipher_order(other)
+        self._sanity_check_groups_order(other)
+        self._sanity_check_extension_order(other)
 
         return other
 

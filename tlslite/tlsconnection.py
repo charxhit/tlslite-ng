@@ -702,6 +702,11 @@ class TLSConnection(TLSRecordLayer):
         if settings.sendFallbackSCSV:
             wireCipherSuites.append(CipherSuite.TLS_FALLBACK_SCSV)
 
+        # If user has given preference, maintain strict order of cipher suites and remove those deemed not
+        # required by user
+        if settings.cipher_order:
+            wireCipherSuites = self._check_elements_and_set_order(wireCipherSuites, settings.cipher_order)
+
         #Initialize acceptable certificate types
         certificateTypes = settings.getCertificateTypes()
 
@@ -716,6 +721,7 @@ class TLSConnection(TLSRecordLayer):
             extensions.append(TLSExtension().create(ExtensionType.
                                                     extended_master_secret,
                                                     bytearray(0)))
+
         # In TLS1.2 advertise support for additional signature types
         if settings.maxVersion >= (3, 3):
             sigList = self._sigHashesToList(settings)
@@ -779,6 +785,12 @@ class TLSConnection(TLSRecordLayer):
                 share_ids = [i.group for i in shares]
                 diff = set(groups) - set(share_ids)
                 groups = share_ids + [i for i in groups if i in diff]
+
+            # If we are asked to maintain a group order, we do so. Key shares will respect the below order
+            # since we validate them in handshake settings
+            if settings.groups_order:
+                groups = self._check_elements_and_set_order(groups, settings.group_order)
+
             extensions.append(SupportedGroupsExtension().create(groups))
 
         if settings.use_heartbeat_extension:
@@ -809,10 +821,15 @@ class TLSConnection(TLSRecordLayer):
 
         sent_version = min(settings.maxVersion, (3, 3))
 
-        #Either send ClientHello (with a resumable session)...
+        # Make sure that the tls extensions are in the specified order if user gave a preference
+        if extensions and settings.extension_order:
+            extensions = self._check_elements_and_set_order(extensions, settings.extension_order,
+                                                            key=lambda ext: ext.extType)
+
+        # Either send ClientHello (with a resumable session)...
         if session and session.sessionID:
-            #If it's resumable, then its
-            #ciphersuite must be one of the acceptable ciphersuites
+            # If it's resumable, then its
+            # ciphersuite must be one of the acceptable ciphersuites
             if session.cipherSuite not in cipherSuites:
                 raise ValueError("Session's cipher suite not consistent "\
                                  "with parameters")
@@ -1174,7 +1191,7 @@ class TLSConnection(TLSRecordLayer):
             except ValueError:
                 continue
 
-        assert None not in new_list, "Requested elements not present in list"
+        assert None not in new_list, "requested elements not present in list to be modified"
         return new_list
 
     @staticmethod
