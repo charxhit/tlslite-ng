@@ -1200,6 +1200,8 @@ class TLSRecordLayer(object):
                     yield Certificate(constructorType, self.version).parse(p)
                 elif subType == HandshakeType.compressed_certificate:
                     yield CompressedCertificate().parse(p)
+                elif subType == HandshakeType.certificate_status:
+                    yield CertificateStatus().parse(p)
                 elif subType == HandshakeType.certificate_request:
                     yield CertificateRequest(self.version).parse(p)
                 elif subType == HandshakeType.certificate_verify:

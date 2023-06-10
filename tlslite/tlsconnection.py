@@ -456,8 +456,7 @@ class TLSConnection(TLSRecordLayer):
                 raise ValueError("Caller passed no nextProtos")
         if alpn is not None and not alpn:
             raise ValueError("Caller passed empty alpn list")
-        if settings.use_alps_ext and not alpn:
-            raise ValueError("cannot use ALPS extension without advertising ALPN extension")
+
         # reject invalid hostnames but accept empty/None ones
         if serverName and not is_valid_hostname(serverName):
             raise ValueError("Caller provided invalid server host name: {0}"
@@ -468,6 +467,10 @@ class TLSConnection(TLSRecordLayer):
         if not settings:
             settings = HandshakeSettings()
         settings = settings.validate()
+
+        if settings.use_alps_ext and not alpn:
+            raise ValueError("cannot use ALPS extension without advertising ALPN extension")
+
         self.sock.padding_cb = settings.padding_cb
 
         if clientCertChain:
@@ -632,7 +635,7 @@ class TLSConnection(TLSRecordLayer):
                                               serverHello.tackExt,
                                               clientHello.random,
                                               serverHello.random,
-                                              keyExchange):
+                                              keyExchange, serverHello):
             if result in (0, 1):
                 yield result
             else: break
@@ -814,6 +817,9 @@ class TLSConnection(TLSRecordLayer):
 
         if settings.use_alps_ext:
             extensions.append(ALPSExtension().create([b'http/1.1']))
+
+        if settings.use_status_request_ext:
+            extensions.append(StatusRequestExtension().create())
 
         # don't send empty list of extensions or extensions in SSLv3
         if not extensions or settings.maxVersion == (3, 0):
@@ -1161,6 +1167,20 @@ class TLSConnection(TLSRecordLayer):
                         "Server responded with invalid Heartbeat extension"):
                     yield result
             self.heartbeat_supported = True
+        if serverHello.getExtension(ExtensionType.status_request):
+            if not settings.use_status_request_ext:
+                for result in self._sendError(
+                        AlertDescription.unsupported_extension,
+                        "Server sent status_request extension without one in "
+                        "client hello"):
+                    yield result
+        if serverHello.getExtension(ExtensionType.signed_certificate_timestamp):
+            if not settings.use_sct_ext:
+                for result in self._sendError(
+                        AlertDescription.unsupported_extension,
+                        "Server sent signed_certificate_timestamp extension without one in "
+                        "client hello"):
+                    yield result
         size_limit_ext = serverHello.getExtension(
             ExtensionType.record_size_limit)
         if size_limit_ext:
@@ -1399,12 +1419,29 @@ class TLSConnection(TLSRecordLayer):
 
             srv_cert_verify_hh = self._handshake_hash.copy()
 
+            expected_types = (HandshakeType.certificate_verify, )
+            status_ext = serverHello.getExtension(ExtensionType.status_request)
+
+            if status_ext:
+                expected_types += (HandshakeType.certificate_status, )
+
             for result in self._getMsg(ContentType.handshake,
-                                       HandshakeType.certificate_verify):
+                                       expected_types):
                 if result in (0, 1):
                     yield result
                 else:
                     break
+
+            if isinstance(result, CertificateStatus):
+                certificate_status = result
+
+                for result in self._getMsg(ContentType.handshake,
+                                           HandshakeType.certificate_verify):
+                    if result in (0, 1):
+                        yield result
+                    else:
+                        break
+
             certificate_verify = result
             assert isinstance(certificate_verify, CertificateVerify)
 
@@ -1746,7 +1783,7 @@ class TLSConnection(TLSRecordLayer):
                            clientCertChain, privateKey,
                            certificateType,
                            tackExt, clientRandom, serverRandom,
-                           keyExchange):
+                           keyExchange, serverHello):
         """Perform the client side of key exchange"""
         # if server chose cipher suite with authentication, get the certificate
         if cipherSuite in CipherSuite.certAllSuites or \
@@ -1761,24 +1798,65 @@ class TLSConnection(TLSRecordLayer):
             serverCertificate = result
         else:
             serverCertificate = None
+
+
         # if server chose RSA key exchange, we need to skip SKE message
         if cipherSuite not in CipherSuite.certSuites:
+
+            # If a status_request extension was present in serverHello, server can send a CertificateStatus msg too
+            expected_types = (HandshakeType.server_key_exchange, )
+            if serverHello.getExtension(ExtensionType.status_request):
+                expected_types += (HandshakeType.certificate_status, )
+
             for result in self._getMsg(ContentType.handshake,
-                                       HandshakeType.server_key_exchange,
+                                       expected_types,
                                        cipherSuite):
                 if result in (0, 1):
                     yield result
                 else: break
+
+            # If the msg was a certificate status, we store it and retrieve the next msg which should be the key
+            # exchange
+            if isinstance(result, CertificateStatus):
+                certificate_status_msg = result
+
+                for result in self._getMsg(ContentType.handshake,
+                                           HandshakeType.server_key_exchange,
+                                           cipherSuite):
+                    if result in (0, 1):
+                        yield result
+                    else: break
+
             serverKeyExchange = result
         else:
             serverKeyExchange = None
+            certificate_status_msg = None
+
+        expected_types = (HandshakeType.certificate_request,
+                          HandshakeType.server_hello_done)
+        # Incase the cipher suite was RSA, and we received a status_request in serverHello, then server might send a
+        # CertificateStatus msg which would not be handled in previous block. So, we handle it here.
+        if cipherSuite in CipherSuite.certSuites and serverHello.getExtension(ExtensionType.status_request):
+            expected_types += (HandshakeType.certificate_status, )
 
         for result in self._getMsg(ContentType.handshake,
-                                   (HandshakeType.certificate_request,
-                                    HandshakeType.server_hello_done)):
+                                   expected_types):
             if result in (0, 1):
                 yield result
             else: break
+
+        # CertificateStatus is sent before CertificateRequest and ServerHelloDone, we handle that first and retrieve
+        # the next msg if we do get CertificateStatus
+        if isinstance(result, CertificateStatus):
+            certificate_status_msg = result
+            for result in self._getMsg(ContentType.handshake,
+                                       (HandshakeType.certificate_request,
+                                        HandshakeType.server_hello_done)
+                                       ):
+                if result in (0, 1):
+                    yield result
+                else:
+                    break
 
         certificateRequest = None
         if isinstance(result, CertificateRequest):
