@@ -806,7 +806,7 @@ class HandshakeSettings(object):
             try:
                 # We must NOT enforce a strict order by simply just checking whether all elements in key_shares
                 # are the first elements of groups_order, because the key_shares can be a non-contiguous subset too
-                prev = groups_order.index(key_shares[i], start=prev+1)
+                prev = groups_order.index(key_shares[i], prev+1)
             except ValueError:
                 raise ValueError("key shares must be in the same order as the groups provided")
 

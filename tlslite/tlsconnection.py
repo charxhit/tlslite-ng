@@ -789,7 +789,7 @@ class TLSConnection(TLSRecordLayer):
             # If we are asked to maintain a group order, we do so. Key shares will respect the below order
             # since we validate them in handshake settings
             if settings.groups_order:
-                groups = self._check_elements_and_set_order(groups, settings.group_order)
+                groups = self._check_elements_and_set_order(groups, settings.groups_order)
 
             extensions.append(SupportedGroupsExtension().create(groups))
 
@@ -820,11 +820,6 @@ class TLSConnection(TLSRecordLayer):
             extensions = None
 
         sent_version = min(settings.maxVersion, (3, 3))
-
-        # Make sure that the tls extensions are in the specified order if user gave a preference
-        if extensions and settings.extension_order:
-            extensions = self._check_elements_and_set_order(extensions, settings.extension_order,
-                                                            key=lambda ext: ext.extType)
 
         # Either send ClientHello (with a resumable session)...
         if session and session.sessionID:
@@ -913,6 +908,12 @@ class TLSConnection(TLSRecordLayer):
                                                 else None,
                                                 session.resumptionMasterSecret
                                                 if session else None)
+
+        # Make sure that the tls extensions are in the specified order if user gave a preference
+        if extensions and settings.extension_order:
+            clientHello.extensions = self._check_elements_and_set_order(clientHello.extensions,
+                                                                        settings.extension_order,
+                                                                        key=lambda ext: ext.extType)
 
         for result in self._sendMsg(clientHello):
             yield result
