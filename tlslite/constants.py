@@ -171,6 +171,7 @@ class ExtensionType(TLSEnum):
     extended_master_secret = 23  # RFC 7627
     compress_certificate = 27  # RFC 8879
     record_size_limit = 28  # RFC 8449
+    session_ticket = 35  # RFC 5077
     extended_random = 40  # draft-rescorla-tls-extended-random-02
     pre_shared_key = 41  # TLS 1.3
     early_data = 42  # TLS 1.3

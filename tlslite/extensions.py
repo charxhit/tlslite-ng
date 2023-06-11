@@ -2231,6 +2231,30 @@ class ALPSExtension(TLSExtension):
         return self
 
 
+class SessionTicketExtension(TLSExtension):
+
+    def __init__(self):
+        super(SessionTicketExtension, self).__init__(extType=ExtensionType.session_ticket)
+        self.ticket = None
+
+    def create(self, ticket=b''):
+        self.ticket = ticket
+        return self
+
+    @property
+    def extData(self):
+        if self.ticket is None:
+            return bytearray(0)
+
+        w = Writer()
+        w.bytes += self.ticket
+        return w.bytes
+
+    def parse(self, p: Parser):
+        self.ticket = p.getFixBytes(p.getRemainingLength())
+        return self
+
+
 TLSExtension._universalExtensions = \
     {
         ExtensionType.server_name: SNIExtension,
@@ -2255,7 +2279,8 @@ TLSExtension._universalExtensions = \
         ExtensionType.record_size_limit: RecordSizeLimitExtension,
         ExtensionType.compress_certificate: CompressCertificateExtension,
         ExtensionType.signed_certificate_timestamp: SCTExtension,
-        ExtensionType.application_settings: ALPSExtension
+        ExtensionType.application_settings: ALPSExtension,
+        ExtensionType.session_ticket: SessionTicketExtension
     }
 
 TLSExtension._serverExtensions = \

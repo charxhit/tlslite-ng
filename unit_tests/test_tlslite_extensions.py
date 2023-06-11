@@ -27,7 +27,8 @@ from tlslite.extensions import TLSExtension, SNIExtension, NPNExtension,\
         PreSharedKeyExtension, PskIdentity, SrvPreSharedKeyExtension, \
         PskKeyExchangeModesExtension, CookieExtension, VarBytesExtension, \
         HeartbeatExtension, IntExtension, RecordSizeLimitExtension, \
-        CompressCertificateExtension, ALPSExtension, SCTExtension
+        CompressCertificateExtension, ALPSExtension, SCTExtension, \
+        SessionTicketExtension
 from tlslite.utils.codec import Parser, Writer
 from tlslite.constants import NameType, ExtensionType, GroupName,\
         ECPointFormat, HashAlgorithm, SignatureAlgorithm, \
@@ -2197,7 +2198,6 @@ class TestStatusRequestExtension(unittest.TestCase):
                                    b'\x00\x02'
                                    b'\x08\x09'))
 
-
     def test_parse_empty(self):
         parser = Parser(bytearray())
 
@@ -2244,6 +2244,53 @@ class TestStatusRequestExtension(unittest.TestCase):
 
         with self.assertRaises(SyntaxError):
             self.ext.parse(parser)
+
+
+class TestSessionTicketExtension(unittest.TestCase):
+    def setUp(self):
+        self.ext = SessionTicketExtension()
+
+    def test___init__(self):
+        self.assertIsNotNone(self.ext)
+        self.assertEqual(self.ext.extType, 35)
+        self.assertEqual(self.ext.extData, bytearray())
+
+    def test_create(self):
+        e = self.ext.create()
+        self.assertIs(e, self.ext)
+        self.assertEqual(e.ticket, b'')
+
+    def test_extData_with_default(self):
+        self.ext.create()
+        self.assertEqual(self.ext.extData,
+                         bytearray(b''))
+
+    def test_extData_with_data(self):
+        self.ext.create(ticket=b'haha')
+        self.assertEqual(self.ext.extData, bytearray(b'haha'))
+
+    def test_write_without_data(self):
+        self.ext.create()
+        self.assertEqual(self.ext.write(), bytearray(b'\x00\x23'    # type session_ticket (35)
+                                                     b'\x00\x00'))  # length (0)
+
+    def test_write_with_data(self):
+        self.ext.create(ticket=b'haha')
+        self.assertEqual(self.ext.write(), bytearray(b'\x00\x23'  # type session_ticket (35)
+                                                     b'\x00\x04'  # length (4)
+                                                     b'haha'))    # ticket (haha)
+
+    def test_parse_empty(self):
+        p = Parser(bytearray(0))
+        ext = self.ext.parse(p)
+
+        self.assertEqual(ext.ticket, bytearray(b''))
+
+    def test_parse_with_value(self):
+        p = Parser(bytearray(b'haha'))
+        ext = self.ext.parse(p)
+
+        self.assertEqual(ext.ticket, bytearray(b'haha'))
 
 
 class TestSupportedVersionsExtension(unittest.TestCase):

@@ -821,6 +821,9 @@ class TLSConnection(TLSRecordLayer):
         if settings.use_status_request_ext:
             extensions.append(StatusRequestExtension().create())
 
+        if settings.use_session_ticket_ext:
+            extensions.append(SessionTicketExtension().create())
+
         # don't send empty list of extensions or extensions in SSLv3
         if not extensions or settings.maxVersion == (3, 0):
             extensions = None
@@ -1179,6 +1182,13 @@ class TLSConnection(TLSRecordLayer):
                 for result in self._sendError(
                         AlertDescription.unsupported_extension,
                         "Server sent signed_certificate_timestamp extension without one in "
+                        "client hello"):
+                    yield result
+        if serverHello.getExtension(ExtensionType.session_ticket):
+            if not settings.use_session_ticket_ext:
+                for result in self._sendError(
+                        AlertDescription.unsupported_extension,
+                        "Server sent session_ticket extension without one in "
                         "client hello"):
                     yield result
         size_limit_ext = serverHello.getExtension(

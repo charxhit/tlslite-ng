@@ -391,6 +391,7 @@ class HandshakeSettings(object):
         self.use_sct_ext = False
         self.use_alps_ext = False
         self.use_status_request_ext = False
+        self.use_session_ticket_ext = False
         # certificate compression extensions
         self.use_certificate_compression = False
         self.certificate_compression_algorithms = compression.DEFAULT
@@ -646,6 +647,9 @@ class HandshakeSettings(object):
         if other.use_status_request_ext not in (True, False):
             raise ValueError("use_status_request_ext must be True or False")
 
+        if other.use_session_ticket_ext not in (True, False):
+            raise ValueError("use_session_ticket_ext must be True or False")
+
         if other.heartbeat_response_callback and not other.use_heartbeat_extension:
             raise ValueError("heartbeat_response_callback requires "
                              "use_heartbeat_extension")
@@ -727,6 +731,7 @@ class HandshakeSettings(object):
         other.use_alps_ext = self.use_alps_ext
         other.use_renegotiation_ext = self.use_renegotiation_ext
         other.use_status_request_ext = self.use_status_request_ext
+        other.use_session_ticket_ext = self.use_session_ticket_ext
         # cert compress
         other.use_certificate_compression = self.use_certificate_compression
         other.certificate_compression_algorithms = self.certificate_compression_algorithms
