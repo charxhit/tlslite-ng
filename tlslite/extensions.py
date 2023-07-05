@@ -2255,6 +2255,32 @@ class SessionTicketExtension(TLSExtension):
         return self
 
 
+class DelegatedCredentialExtension(_SigListExt):
+
+    def __init__(self):
+        """Create instance of class"""
+        super(DelegatedCredentialExtension, self).__init__(
+            1, 2, 2,
+            'sigalgs',
+            ExtensionType.delegated_credential,
+            SignatureScheme)
+
+
+class CertificateDelegatedCredential(TLSExtension):
+
+    def __init__(self):
+        super(CertificateDelegatedCredential, self).__init__()
+
+    def create(self):
+        pass
+
+    def write(self):
+        return Writer()
+
+    def parse(self, p):
+        pass
+
+
 TLSExtension._universalExtensions = \
     {
         ExtensionType.server_name: SNIExtension,
@@ -2293,7 +2319,8 @@ TLSExtension._serverExtensions = \
 
 TLSExtension._certificateExtensions = \
     {
-        ExtensionType.status_request: CertificateStatusExtension}
+        ExtensionType.status_request: CertificateStatusExtension,
+        ExtensionType.delegated_credential: CertificateDelegatedCredential}
 
 TLSExtension._hrrExtensions = \
     {

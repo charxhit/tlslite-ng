@@ -28,7 +28,7 @@ from tlslite.extensions import TLSExtension, SNIExtension, NPNExtension,\
         PskKeyExchangeModesExtension, CookieExtension, VarBytesExtension, \
         HeartbeatExtension, IntExtension, RecordSizeLimitExtension, \
         CompressCertificateExtension, ALPSExtension, SCTExtension, \
-        SessionTicketExtension
+        SessionTicketExtension, DelegatedCredentialExtension
 from tlslite.utils.codec import Parser, Writer
 from tlslite.constants import NameType, ExtensionType, GroupName,\
         ECPointFormat, HashAlgorithm, SignatureAlgorithm, \
@@ -2241,6 +2241,47 @@ class TestStatusRequestExtension(unittest.TestCase):
                                   b'\x00\x02'
                                   b'\x08\x09'
                                   b'\x00'))
+
+        with self.assertRaises(SyntaxError):
+            self.ext.parse(parser)
+
+
+class TestDelegatedCredentialExtension(unittest.TestCase):
+
+    def setUp(self):
+        self.ext = DelegatedCredentialExtension()
+
+    def test___init__(self):
+        self.assertIsNotNone(self.ext)
+        self.assertEqual(self.ext.extType, 34)
+        self.assertEqual(self.ext.extData, bytearray())
+
+    def test_create(self):
+        e = self.ext.create([])
+        self.assertEqual(e.sigalgs, [])
+
+    def test_write(self):
+        self.ext.create([(HashAlgorithm.sha1, SignatureAlgorithm.rsa),
+                         (HashAlgorithm.sha256, SignatureAlgorithm.rsa)])
+
+        self.assertEqual(bytearray(
+            b'\x00\x22' +           # type delegated_credential (34)
+            b'\x00\x06' +           # overall length of extension
+            b'\x00\x04' +           # array length
+            b'\x02\x01' +           # SHA1+RSA
+            b'\x04\x01'             # SHA256+RSA
+            ), self.ext.write())
+
+    def test_parse_with_empty_data(self):
+        parser = Parser(bytearray(0))
+        self.ext.parse(parser)
+        self.assertIsNone(self.ext.sigalgs)
+
+    def test_parse_with_extra_data_at_end(self):
+        parser = Parser(bytearray(
+            b'\x00\x02' +           # array length
+            b'\x04\x01' +           # SHA256+RSA
+            b'\xff\xff'))           # padding
 
         with self.assertRaises(SyntaxError):
             self.ext.parse(parser)

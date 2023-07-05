@@ -824,6 +824,9 @@ class TLSConnection(TLSRecordLayer):
         if settings.use_session_ticket_ext:
             extensions.append(SessionTicketExtension().create())
 
+        if settings.use_delegated_credential_ext and settings.maxVersion >= (3, 3):
+            extensions.append(DelegatedCredentialExtension().create(sigList))
+
         # don't send empty list of extensions or extensions in SSLv3
         if not extensions or settings.maxVersion == (3, 0):
             extensions = None
