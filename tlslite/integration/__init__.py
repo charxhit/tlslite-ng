@@ -9,5 +9,4 @@ __all__ = ["asyncstatemachine",
            "imap4_tls",
            "smtp_tls",
            "xmlrpctransport",
-           "tlssocketservermixin",
-           "tlsasyncdispatchermixin"]
+           "tlssocketservermixin"]
